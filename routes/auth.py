@@ -1,10 +1,12 @@
 import uuid
 
 import bcrypt
+import jwt
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db
+from middlewares.auth_middleware import auth_middleware
 from models.user import User
 from pydantic_schemas.user_create import UserCreate
 from pydantic_schemas.user_login import UserLogin
@@ -20,7 +22,7 @@ def signup_user(user: UserCreate, db: Session = Depends(get_db)):
     if user_db:
         raise HTTPException(
             400,
-            "User with th e same email alredy exists!",
+            "User with the same email already exists!",
         )
 
     hashed_pw = bcrypt.hashpw(
@@ -59,4 +61,16 @@ def login_user(user: UserLogin, db: Session = Depends(get_db)):
     if not is_match:
         raise HTTPException(400, "Incorrect password!")
 
-    return user_db
+    token = jwt.encode({"id": user_db.id}, "password_key")
+
+    return {"token": token, "user": user_db}
+
+
+@router.get("/")
+def current_user_data(db: Session = Depends(get_db), user_dic=Depends(auth_middleware)):
+    user = db.query(User).filter(User.id == user_dic["uid"]).first()
+
+    if not user:
+        raise HTTPException(404, "User not found!")
+
+    return user
